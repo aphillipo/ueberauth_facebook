@@ -11,7 +11,8 @@ defmodule Ueberauth.Strategy.Facebook do
                             :scope,
                             :locale,
                             :state,
-                            :display
+                            :display,
+                            :appsecret_proof
                           ]
 
 
@@ -141,6 +142,8 @@ defmodule Ueberauth.Strategy.Facebook do
     case OAuth2.AccessToken.get(token, path) do
       {:ok, %OAuth2.Response{status_code: 401, body: _body}} ->
         set_errors!(conn, [error("token", "unauthorized")])
+      {:ok, %OAuth2.Response{status_code: 400, body: _body}} ->
+        set_errors!(conn, [error("unknown", "bad request")])
       {:ok, %OAuth2.Response{status_code: status_code, body: user}}
         when status_code in 200..399 ->
         put_private(conn, :facebook_user, user)
@@ -153,6 +156,7 @@ defmodule Ueberauth.Strategy.Facebook do
     conn
     |> query_params(:locale)
     |> Map.merge(query_params(conn, :profile))
+    |> Map.merge(query_params(conn, :appsecret_proof))
     |> URI.encode_query
   end
 
@@ -164,6 +168,11 @@ defmodule Ueberauth.Strategy.Facebook do
       nil -> %{}
       locale -> %{"locale" => locale}
     end
+  end
+  defp query_params(conn, :appsecret_proof) do
+    %{client_id: client_id, client_secret: client_secret} = Application.get_env(:ueberauth, Ueberauth.Strategy.Facebook.OAuth)
+    appsecret_proof = :crypto.hash(:sha256, client_id <> client_secret)
+    %{"appsecret_proof" => appsecret_proof}
   end
 
   defp option(conn, key) do
